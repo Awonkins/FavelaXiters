@@ -1,0 +1,53 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Descargar codigo
+        uses: actions/checkout@v4
+
+      - name: Ver version de Xcode
+        run: xcodebuild -version
+
+      - name: Ver esquemas del proyecto
+        run: xcodebuild -project ThreeOneOSFive.xcodeproj -list
+
+      - name: Compilar sin firmar
+        run: |
+          set -e
+          SCHEME=$(xcodebuild -project ThreeOneOSFive.xcodeproj -list -json | python3 -c "import sys,json;print(json.load(sys.stdin)['project']['schemes'][0])")
+          echo "Esquema detectado: $SCHEME"
+          xcodebuild \
+            -project ThreeOneOSFive.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Empaquetar el IPA
+        run: |
+          set -e
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" | head -n1)
+          echo "App encontrada: $APP"
+          rm -rf Payload && mkdir Payload
+          cp -r "$APP" Payload/
+          zip -qry FavelaXiters.ipa Payload
+          ls -lh FavelaXiters.ipa
+
+      - name: Subir el IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: FavelaXiters-IPA-sin-firmar
+          path: FavelaXiters.ipa
+          retention-days: 30
