@@ -543,6 +543,7 @@ struct FVKeyScreen: View {
             }
         }
     }
+}
 struct FVRemoteImage: View {
     let path: String
     @State private var img: UIImage?
