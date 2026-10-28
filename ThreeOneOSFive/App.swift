@@ -69,6 +69,7 @@ struct ThreeOneOSFiveApp: App {
                     FavelaGateView(session: fvSession)
                         .transition(.opacity)
                         .zIndex(2)
+                    .environmentObject(patchDraftCoordinator)
                 }
             }
             .displayIdentityAttribution(isPresented: $showAttribution, enabled: !showOnboarding)
@@ -502,4 +503,307 @@ struct FVKeyScreen: View {
                     .foregroundColor(Color(red: 0.01, green: 0.07, blue: 0.11))
                     .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
-     
+                .disabled(loading)
+
+                Text("Favela Software")
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(2)
+                    .foregroundColor(.white.opacity(0.3))
+                    .padding(.top, 24)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 28)
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private func entrar() {
+        var clean = code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !clean.isEmpty else {
+            error = "Ingresá una key"
+            return
+        }
+        if !clean.hasPrefix("FLV-") { clean = "FLV-" + clean }
+        error = nil
+        loading = true
+        Task {
+            do {
+                try await FVAPI.validar(clean)
+                await MainActor.run {
+                    session.save(clean)
+                    loading = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.error = error.localizedDescription
+                    loading = false
+                }
+            }
+        }
+    }
+struct FVRemoteImage: View {
+    let path: String
+    @State private var img: UIImage?
+
+    var body: some View {
+        ZStack {
+            Color.white.opacity(0.06)
+            if let img {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+            }
+        }
+        .clipped()
+        .task {
+            guard img == nil,
+                  let u = URL(string: FV.raw + path),
+                  let (d, _) = try? await URLSession.shared.data(from: u),
+                  let loaded = UIImage(data: d) else { return }
+            img = loaded
+        }
+    }
+}
+struct FVGameScreen: View {
+    @ObservedObject var session: FVSession
+    let onPick: (FVGame) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 92)
+            Text("ELEGÍ EL JUEGO")
+                .font(.system(size: 10, weight: .heavy))
+                .tracking(3)
+                .foregroundColor(Color(red: 0.37, green: 0.85, blue: 1))
+            Text("¿Dónde vas a aplicar?")
+                .font(.system(size: 24, weight: .black))
+                .foregroundColor(.white)
+                .padding(.top, 8)
+
+            HStack(spacing: 14) {
+                card(.ff)
+                card(.ffmax)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 30)
+
+            Spacer()
+
+            Button {
+                session.clear()
+            } label: {
+                Text("CERRAR SESIÓN")
+                    .font(.system(size: 11, weight: .heavy))
+                    .tracking(2)
+                    .foregroundColor(.white.opacity(0.55))
+            }
+            .padding(.bottom, 34)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func card(_ g: FVGame) -> some View {
+        Button {
+            onPick(g)
+        } label: {
+            VStack(spacing: 12) {
+                FVRemoteImage(path: g == .ff ? "Imagenes/ff.png" : "Imagenes/ffmax.png")
+                    .frame(width: 96, height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 22))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22)
+                            .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                    )
+                Text(g.title)
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                Text(g.sub)
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(1)
+                    .foregroundColor(.white.opacity(0.4))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 22)
+            .background(Color.white.opacity(0.05))
+            .overlay(
+                RoundedRectangle(cornerRadius: 26)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 26))
+        }
+    }
+}
+
+struct FVPatchScreen: View {
+    let game: FVGame
+    @ObservedObject var session: FVSession
+    let onBack: () -> Void
+
+    @EnvironmentObject private var drafts: PatchDraftCoordinator
+    @State private var cat = 0
+    @State private var active: Set<String> = []
+    @State private var busy: String?
+    @State private var msg: String?
+
+    private var items: [FVPatch] { FVData.items(game, cat) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            topBar
+            tabs
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 9) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { idx, p in
+                        row(idx + 1, p)
+                    }
+                    infoBox
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 44)
+            }
+        }
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            Button { onBack() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 36, height: 36)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Circle())
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(game.title)
+                    .font(.system(size: 13, weight: .black))
+                    .foregroundColor(.white)
+                Text("PARCHES")
+                    .font(.system(size: 9, weight: .heavy))
+                    .tracking(2)
+                    .foregroundColor(Color(red: 0.37, green: 0.85, blue: 1))
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 58)
+        .padding(.bottom, 12)
+    }
+
+    private var tabs: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(Array(FVData.catNames.enumerated()), id: \.offset) { i, n in
+                    Button { cat = i } label: {
+                        Text(n)
+                            .font(.system(size: 9.5, weight: .heavy))
+                            .foregroundColor(cat == i ? .black : .white.opacity(0.6))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(cat == i ? Color(red: 0.37, green: 0.85, blue: 1) : Color.white.opacity(0.07))
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+        .padding(.bottom, 4)
+    }
+
+    private func row(_ n: Int, _ p: FVPatch) -> some View {
+        let on = active.contains(p.id.uuidString)
+        return HStack(spacing: 12) {
+            Text("\(n)")
+                .font(.system(size: 11, weight: .black))
+                .foregroundColor(.black)
+                .frame(width: 22, height: 22)
+                .background(Color.white.opacity(0.85))
+                .clipShape(Circle())
+            Text(p.label)
+                .font(.system(size: 11.5, weight: .bold))
+                .foregroundColor(.white)
+                .lineLimit(2)
+            Spacer()
+            if busy == p.id.uuidString {
+                ProgressView().tint(.white)
+            } else {
+                Button { toggle(p) } label: {
+                    Text(on ? "ON" : "OFF")
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundColor(on ? .black : .white.opacity(0.7))
+                        .frame(width: 44, height: 26)
+                        .background(on ? Color(red: 0.35, green: 0.95, blue: 0.55) : Color.white.opacity(0.1))
+                        .clipShape(Capsule())
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .background(Color.white.opacity(0.05))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var infoBox: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("CÓMO SE USA")
+                .font(.system(size: 9.5, weight: .heavy))
+                .tracking(2)
+                .foregroundColor(Color(red: 0.37, green: 0.85, blue: 1))
+            Text("1. Abrí el juego y salí en el 40% sin cerrarlo.\n2. Volvé acá y activá el parche.\n3. Elegí el contenedor del juego.\n4. Volvé al lobby y desactivá el parche.")
+                .font(.system(size: 11))
+                .foregroundColor(.white.opacity(0.6))
+                .fixedSize(horizontal: false, vertical: true)
+            if let msg {
+                Text(msg)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(red: 0.37, green: 0.85, blue: 1))
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.04))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .padding(.top, 8)
+    }
+
+    private func toggle(_ p: FVPatch) {
+        let key = p.id.uuidString
+        if active.contains(key) {
+            active.remove(key)
+            msg = "\(p.label) desactivado"
+            return
+        }
+        guard let remote = FVStorage.remote(game, p.file) else { return }
+        busy = key
+        msg = nil
+        Task {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: remote)
+                try data.write(to: FVStorage.url(p.file))
+                await MainActor.run {
+                    busy = nil
+                    active.insert(key)
+                    msg = "\(p.label) descargado"
+                    drafts.presentImport(FVStorage.url(p.file))
+                }
+            } catch {
+                await MainActor.run {
+                    busy = nil
+                    msg = "Error al descargar"
+                }
+            }
+        }
+    }
+}
