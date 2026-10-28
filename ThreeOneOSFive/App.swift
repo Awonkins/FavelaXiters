@@ -609,7 +609,7 @@ struct FVGameScreen: View {
             onPick(g)
         } label: {
             VStack(spacing: 12) {
-                FVRemoteImage(path: g == .ff ? "Imagenes/ff.png" : "Imagenes/ffmax.png")
+                FVRemoteImage(path: g == .ff ? "Imagenes/Ff.png" : "Imagenes/Ffmax.png")
                     .frame(width: 96, height: 96)
                     .clipShape(RoundedRectangle(cornerRadius: 22))
                     .overlay(
