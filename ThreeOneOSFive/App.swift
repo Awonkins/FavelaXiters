@@ -8,6 +8,7 @@ struct ThreeOneOSFiveApp: App {
     @StateObject private var fileOperationCoordinator = FileOperationCoordinator()
     @StateObject private var patchStore = PatchProjectStore()
     @StateObject private var repositoryStore = PackageRepositoryStore()
+    @StateObject private var fvSession = FVSession()
     @AppStorage(AppLanguage.storageKey) private var languageCode = AppLanguage.english.rawValue
     @State private var showOnboarding = OnboardingStore.shouldShow()
     @State private var showAttribution = false
@@ -17,7 +18,7 @@ struct ThreeOneOSFiveApp: App {
 
     init() {
         setupLogCapture()
-        log("app: 3105 launching — iOS \(AppInfo.osVersion) (\(AppInfo.osBuild)) \(AppInfo.machineName)")
+        log("app: Favela launching — iOS \(AppInfo.osVersion) (\(AppInfo.osBuild)) \(AppInfo.machineName)")
     }
 
     private var language: AppLanguage {
@@ -62,6 +63,12 @@ struct ThreeOneOSFiveApp: App {
                             : .opacity.combined(with: .scale(scale: 0.98))
                     )
                     .zIndex(1)
+                }
+
+                if !fvSession.hidden {
+                    FavelaGateView(session: fvSession)
+                        .transition(.opacity)
+                        .zIndex(2)
                 }
             }
             .displayIdentityAttribution(isPresented: $showAttribution, enabled: !showOnboarding)
@@ -160,8 +167,6 @@ class AppState: ObservableObject {
     private func refreshKernelExploitStatus() {
         guard !kernelExploitRunning else { return }
 
-        // iOS < 26: kernel R/W success persists (no sandbox probe)
-        // iOS >= 26: verify full sandbox escape is still active
         if KernelExploit.requiresSandboxEscape {
             if KernelExploit.hasSandboxAccess() {
                 if !exploitStatus.isSuccess {
@@ -202,3 +207,299 @@ class AppState: ObservableObject {
         }
     }
 }
+
+// MARK: - Favela
+
+enum FV {
+    static let base = "https://vzfhzfqljnlirvibobwz.supabase.co"
+    static let anon = "sb_publishable_X9vaC--1NEQjTtCe6ktc3Q_IiOTkDH8"
+    static let raw = "https://raw.githubusercontent.com/Awonkins/FavelaXiters/main/"
+    static let bgA = "Imagenes/file_00000000ac4c820ea5a677232b5941a5.png"
+    static let bgB = "Imagenes/file_00000000c620820e83e609257c806f7e.png"
+    static var device: String { UIDevice.current.identifierForVendor?.uuidString ?? "ios" }
+}
+
+enum FVGame: String, CaseIterable, Identifiable {
+    case ff, ffmax
+    var id: String { rawValue }
+    var title: String { self == .ff ? "FREE FIRE" : "FREE FIRE MAX" }
+    var sub: String { self == .ff ? "VERSIÓN NORMAL" : "VERSIÓN MAX" }
+    var folder: String { self == .ff ? "Patches/ff/" : "Patches/ffmax/" }
+}
+
+struct FVPatch: Identifiable {
+    let id = UUID()
+    let label: String
+    let file: String
+}
+
+enum FVData {
+    static let aim = ["Pecho", "Cuello", "Cabeza", "Drag", "Balas Mágicas"]
+    static let catNames = ["AIMBOT SIN ANTENA", "AIMBOT CON ANTENA", "HOLO ARM", "HOLO PJ"]
+
+    static func items(_ g: FVGame, _ cat: Int) -> [FVPatch] {
+        switch (g, cat) {
+        case (.ff, 0):
+            let f = ["AIMBOT PECHO SIN ANTENA.txt", "CUELLO SIN ANTENA.txt", "AIMBOT CABEZA SIN ANTENA.txt", "AIMBOT DRAG SIN ANTENA.txt", "AVATAR BALAS MAGICAS SIN ANTENA.txt"]
+            return zip(aim, f).map { FVPatch(label: "AIMBOT " + $0.0.uppercased(), file: $0.1) }
+        case (.ff, 1):
+            let f = ["PECHO CON ANTENA FFTH.txt", "CUELLO CON ANTENA FF NORMAL.txt", "CABEZA CON ANTENA FF NORMAL.txt", "DRAG CON ANTENA FF NORMAL.txt", "BALA MAGICA CON ANTENA.txt"]
+            return zip(aim, f).map { FVPatch(label: "AIMBOT " + $0.0.uppercased(), file: $0.1) }
+        case (.ff, 2):
+            return [FVPatch(label: "HOLO ARM RTX VERDE", file: "RTX FFTH VERDE.txt"),
+                    FVPatch(label: "HOLO ARM ROJO X TURQUESA", file: "ROJO X TURQUESA BORDES.txt")]
+        case (.ff, 3):
+            return [FVPatch(label: "HOLO PJ ROSA", file: "PJ ROSA ROBOTICO FFTH.txt")]
+        case (.ffmax, 0):
+            let f = ["PECHO FF MAX SIN ANTENA.txt", "CUELLO FREE FIRE MAX SIN ANTENA.txt", "CABEZA FF MAX SIN ANTENA.txt", "DRAG FF MAX SIN ANTENA.txt", "BALA MAGICA FF MAX.txt"]
+            return zip(aim, f).map { FVPatch(label: "AIMBOT " + $0.0.uppercased(), file: $0.1) }
+        case (.ffmax, 1):
+            let f = ["PECHO ANTENA FFMAX.txt", "AIMBOT CUELLO ANTENA FFMAX.txt", "AIMBOT CABEZA FFMAX.txt", "AIM DRAG ANTENA FFMAX.txt", "BALAS MAGICAS ANTENA FFMAX.txt"]
+            return zip(aim, f).map { FVPatch(label: "AIMBOT " + $0.0.uppercased(), file: $0.1) }
+        case (.ffmax, 2):
+            return [FVPatch(label: "HOLO ARM BLANCO X CIAN", file: "CIAN X BLANCO FFMAX.txt"),
+                    FVPatch(label: "HOLO ARM AMARILLO", file: "HOLO ARM AMARILLO FREE MAX .txt")]
+        default:
+            return [FVPatch(label: "HOLO PJ ROJO", file: "ROBOTICO ROJO PJ FFMAX.txt")]
+        }
+    }
+}
+
+enum FVStorage {
+    static func dir() -> URL {
+        let d = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Patches", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }
+    static func url(_ file: String) -> URL {
+        dir().appendingPathComponent((file as NSString).deletingPathExtension + ".3105")
+    }
+    static func remote(_ g: FVGame, _ file: String) -> URL? {
+        let enc = file.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? file
+        return URL(string: FV.raw + g.folder + enc)
+    }
+}
+
+enum FVError: LocalizedError {
+    case msg(String)
+    var errorDescription: String? { if case let .msg(m) = self { return m }; return nil }
+}
+
+final class FVSession: ObservableObject {
+    @Published var unlocked: Bool
+    @Published var hidden = false
+
+    init() {
+        let saved = UserDefaults.standard.string(forKey: "fv_key")
+        let when = UserDefaults.standard.double(forKey: "fv_when")
+        unlocked = saved != nil && (Date().timeIntervalSince1970 - when) < 12 * 3600
+    }
+
+    func save(_ k: String) {
+        UserDefaults.standard.set(k, forKey: "fv_key")
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "fv_when")
+        unlocked = true
+    }
+
+    func clear() {
+        UserDefaults.standard.removeObject(forKey: "fv_key")
+        UserDefaults.standard.removeObject(forKey: "fv_when")
+        unlocked = false
+    }
+}
+
+enum FVAPI {
+    static func hdrs() -> [String: String] {
+        ["apikey": FV.anon, "Content-Type": "application/json"]
+    }
+
+    static func validar(_ raw: String) async throws {
+        let code = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard code.hasPrefix("FLV-"), code.count >= 12 else { throw FVError.msg("Formato inválido") }
+
+        var c = URLComponents(string: FV.base + "/rest/v1/keys")!
+        c.queryItems = [URLQueryItem(name: "code", value: "eq.\(code)"),
+                        URLQueryItem(name: "select", value: "*")]
+        var req = URLRequest(url: c.url!)
+        hdrs().forEach { req.setValue($1, forHTTPHeaderField: $0) }
+
+        let (data, _) = try await URLSession.shared.data(for: req)
+        guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              let row = rows.first else { throw FVError.msg("Key inexistente") }
+
+        let status = row["status"] as? String ?? "activa"
+        if status == "baneada" { throw FVError.msg("Key baneada") }
+        if status == "pausada" { throw FVError.msg("Key pausada") }
+
+        if let exp = row["expires_at"] as? String,
+           let d = ISO8601DateFormatter().date(from: exp), d < Date() {
+            throw FVError.msg("Key vencida")
+        }
+
+        let dev = row["device_id"] as? String
+        let blk = row["blocked_device"] as? String
+
+        if let dev, !dev.isEmpty {
+            if dev != FV.device { throw FVError.msg("Key en uso en otro dispositivo") }
+        } else {
+            if let blk, blk == FV.device { throw FVError.msg("Key reseteada en este dispositivo") }
+            try await bind(code)
+        }
+    }
+
+    static func bind(_ code: String) async throws {
+        var c = URLComponents(string: FV.base + "/rest/v1/keys")!
+        c.queryItems = [URLQueryItem(name: "code", value: "eq.\(code)")]
+        var req = URLRequest(url: c.url!)
+        req.httpMethod = "PATCH"
+        hdrs().forEach { req.setValue($1, forHTTPHeaderField: $0) }
+        req.setValue("return=minimal", forHTTPHeaderField: "Prefer")
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "device_id": FV.device,
+            "activated_at": ISO8601DateFormatter().string(from: Date())
+        ])
+        _ = try await URLSession.shared.data(for: req)
+    }
+}
+
+final class FVImages: ObservableObject {
+    static let shared = FVImages()
+    @Published var bg: UIImage?
+
+    func load() async {
+        guard bg == nil else { return }
+        var tall: UIImage?
+        for path in [FV.bgA, FV.bgB] {
+            guard let u = URL(string: FV.raw + path) else { continue }
+            if let (d, _) = try? await URLSession.shared.data(from: u),
+               let img = UIImage(data: d), img.size.height > img.size.width {
+                tall = img
+            }
+        }
+        if let t = tall { await MainActor.run { self.bg = t } }
+    }
+}
+
+struct FVBackground: View {
+    @ObservedObject private var imgs = FVImages.shared
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                Color(red: 0.02, green: 0.03, blue: 0.06)
+                if let bg = imgs.bg {
+                    Image(uiImage: bg)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                }
+                LinearGradient(
+                    colors: [.black.opacity(0.35), .black.opacity(0.72), .black.opacity(0.94)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        }
+        .ignoresSafeArea()
+        .task { await imgs.load() }
+    }
+}
+
+struct FavelaGateView: View {
+    @ObservedObject var session: FVSession
+    @State private var game: FVGame?
+
+    var body: some View {
+        ZStack {
+            FVBackground()
+            if !session.unlocked {
+                FVKeyScreen(session: session)
+            } else if let g = game {
+                FVPatchScreen(game: g, session: session) { game = nil }
+            } else {
+                FVGameScreen(session: session) { game = $0 }
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+struct FVKeyScreen: View {
+    @ObservedObject var session: FVSession
+    @State private var code = ""
+    @State private var error: String?
+    @State private var loading = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer().frame(height: 96)
+            Text("Favela")
+                .font(.system(size: 44, weight: .bold, design: .serif))
+                .italic()
+                .foregroundColor(.white)
+            Text("2026")
+                .font(.system(size: 11, weight: .bold))
+                .tracking(6)
+                .foregroundColor(.white.opacity(0.6))
+                .padding(.top, 6)
+
+            Spacer().frame(height: 40)
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("ACCESO")
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(2)
+                    .foregroundColor(Color(red: 0.37, green: 0.85, blue: 1))
+
+                Text("Ingresá tu key")
+                    .font(.system(size: 27, weight: .black))
+                    .foregroundColor(.white)
+
+                Text("Una key por dispositivo. La primera vez necesita internet, después funciona hasta 12 horas sin conexión.")
+                    .font(.system(size: 12.5))
+                    .foregroundColor(.white.opacity(0.55))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 6) {
+                    Text("FLV-")
+                        .font(.system(size: 15, weight: .heavy))
+                        .foregroundColor(Color(red: 0.37, green: 0.85, blue: 1))
+                    TextField("XXXXXXXX", text: $code)
+                        .font(.system(size: 15, weight: .bold))
+                        .tracking(3)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .foregroundColor(.white)
+                }
+                .padding(15)
+                .background(Color.white.opacity(0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(Color(red: 0.37, green: 0.85, blue: 1).opacity(0.35), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+
+                if let error {
+                    Text(error)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(Color(red: 1, green: 0.48, blue: 0.54))
+                }
+
+                Button {
+                    entrar()
+                } label: {
+                    HStack {
+                        if loading { ProgressView().tint(.black) }
+                        Text(loading ? "VERIFICANDO" : "INGRESAR")
+                            .font(.system(size: 12.5, weight: .black))
+                            .tracking(1.6)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(16)
+                    .background(LinearGradient(colors: [Color(red: 0, green: 0.88, blue: 1), Color(red: 0.3, green: 0.49, blue: 1)], startPoint: .leading, endPoint: .trailing))
+                    .foregroundColor(Color(red: 0.01, green: 0.07, blue: 0.11))
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+                }
+     
