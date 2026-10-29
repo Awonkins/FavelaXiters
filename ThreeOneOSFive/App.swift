@@ -657,6 +657,7 @@ struct FVPatchScreen: View {
     @State private var busy: String?
     @State private var msg: String?
     @State private var receipts: [String: PatchTransactionReceipt] = [:]
+    @State private var access = false
 
     private var items: [FVPatch] { FVData.items(game, cat) }
 
@@ -664,6 +665,7 @@ struct FVPatchScreen: View {
         VStack(spacing: 0) {
             topBar
             tabs
+            accessBar
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 9) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { idx, p in
@@ -675,6 +677,37 @@ struct FVPatchScreen: View {
                 .padding(.top, 12)
                 .padding(.bottom, 44)
             }
+        }
+        .task {
+            access = KernelExploit.hasSandboxAccess()
+            if !access { runExploit() }
+        }
+    }
+
+    private var accessBar: some View {
+        Button {
+            runExploit()
+        } label: {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(access ? Color(red: 0.35, green: 0.95, blue: 0.55) : Color(red: 1, green: 0.5, blue: 0.5))
+                    .frame(width: 7, height: 7)
+                Text(access ? "ACCESO OK" : "SIN ACCESO — TOCÁ PARA REINTENTAR")
+                    .font(.system(size: 9, weight: .heavy))
+                    .tracking(1)
+                    .foregroundColor(access ? Color(red: 0.35, green: 0.95, blue: 0.55) : Color(red: 1, green: 0.6, blue: 0.6))
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 6)
+        }
+    }
+
+    private func runExploit() {
+        Task.detached(priority: .userInitiated) {
+            _ = KernelExploit.run()
+            let ok = KernelExploit.hasSandboxAccess()
+            await MainActor.run { access = ok }
         }
     }
 
