@@ -314,8 +314,7 @@ enum FVAPI {
     static func hdrs() -> [String: String] {
         ["apikey": FV.anon, "Content-Type": "application/json"]
     }
-
-    static func validar(_ raw: String) async throws {
+static func validar(_ raw: String) async throws -> Date? {
         let code = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard code.hasPrefix("FLV-"), code.count >= 12 else { throw FVError.msg("Formato inválido") }
 
@@ -333,10 +332,8 @@ enum FVAPI {
         if status == "baneada" { throw FVError.msg("Key baneada") }
         if status == "pausada" { throw FVError.msg("Key pausada") }
 
-        if let exp = row["expires_at"] as? String,
-           let d = ISO8601DateFormatter().date(from: exp), d < Date() {
-            throw FVError.msg("Key vencida")
-        }
+        let expiry = (row["expires_at"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) }
+        if let expiry, expiry < Date() { throw FVError.msg("Key vencida") }
 
         let dev = row["device_id"] as? String
         let blk = row["blocked_device"] as? String
@@ -347,7 +344,9 @@ enum FVAPI {
             if let blk, blk == FV.device { throw FVError.msg("Key reseteada en este dispositivo") }
             try await bind(code)
         }
-    }
+
+        return expiry
+}
 
     static func bind(_ code: String) async throws {
         var c = URLComponents(string: FV.base + "/rest/v1/keys")!
@@ -530,9 +529,9 @@ struct FVKeyScreen: View {
         loading = true
         Task {
             do {
-                try await FVAPI.validar(clean)
+                let exp = try await FVAPI.validar(clean)
                 await MainActor.run {
-                    session.save(clean)
+                    session.save(clean, expires: exp)
                     loading = false
                 }
             } catch {
