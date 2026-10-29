@@ -716,14 +716,14 @@ struct FVPatchScreen: View {
     }
 
     private func row(_ n: Int, _ p: FVPatch) -> some View {
-        let on = active.contains(p.id.uuidString)
+        let on = active.contains(p.file)
         return HStack(spacing: 11) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(red: 0.05, green: 0.33, blue: 0.52).opacity(0.55))
+                    .fill(Color(red: 0.05, green: 0.33, blue: 0.52).opacity(on ? 0.95 : 0.55))
                 Image(systemName: cat >= 2 ? "sparkles" : "scope")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(Color(red: 0.45, green: 0.9, blue: 1))
+                    .foregroundColor(on ? .white : Color(red: 0.45, green: 0.9, blue: 1))
             }
             .frame(width: 40, height: 40)
 
@@ -735,16 +735,16 @@ struct FVPatchScreen: View {
                 Text(on ? "ACTIVO" : "TOCA PARA ACTIVAR")
                     .font(.system(size: 8.5, weight: .semibold))
                     .tracking(0.4)
-                    .foregroundColor(on ? Color(red: 0.4, green: 0.95, blue: 0.6) : .white.opacity(0.4))
+                    .foregroundColor(on ? Color(red: 0.37, green: 0.85, blue: 1) : .white.opacity(0.4))
             }
 
             Spacer(minLength: 6)
 
-            if busy == p.id.uuidString {
+            if busy == p.file {
                 ProgressView().tint(.white).frame(width: 46)
             } else {
                 Toggle("", isOn: Binding(
-                    get: { active.contains(p.id.uuidString) },
+                    get: { active.contains(p.file) },
                     set: { _ in toggle(p) }
                 ))
                 .labelsHidden()
@@ -755,14 +755,14 @@ struct FVPatchScreen: View {
         .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 18)
-                .fill(Color.white.opacity(0.05))
+                .fill(Color.white.opacity(on ? 0.09 : 0.05))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18)
                 .stroke(
                     on
-                        ? Color(red: 0.37, green: 0.85, blue: 1).opacity(0.45)
-                        : Color(red: 0.37, green: 0.85, blue: 1).opacity(0.12),
+                        ? Color(red: 0.37, green: 0.85, blue: 1).opacity(0.55)
+                        : Color.white.opacity(0.12),
                     lineWidth: 1
                 )
         )
