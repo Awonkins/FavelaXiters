@@ -582,6 +582,8 @@ struct FVGameScreen: View {
                 .font(.system(size: 24, weight: .black))
                 .foregroundColor(.white)
                 .padding(.top, 8)
+            FVKeyInfo(session: session)
+                .padding(.top, 16)
 
             HStack(spacing: 14) {
                 card(.ff)
