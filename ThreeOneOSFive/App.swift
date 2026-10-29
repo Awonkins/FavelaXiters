@@ -828,6 +828,7 @@ struct FVPatchScreen: View {
             }
         }
     }
+}
 
 struct FVKeyInfo: View {
     @ObservedObject var session: FVSession
