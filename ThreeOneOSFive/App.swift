@@ -229,9 +229,9 @@ enum FVGame: String, CaseIterable, Identifiable {
 }
 
 struct FVPatch: Identifiable {
-    let id = UUID()
     let label: String
     let file: String
+    var id: String { file }
 }
 
 enum FVData {
