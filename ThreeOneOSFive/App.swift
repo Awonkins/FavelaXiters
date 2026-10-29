@@ -796,15 +796,13 @@ struct FVPatchScreen: View {
     }
 
     private func toggle(_ p: FVPatch) {
-        let key = p.id.uuidString
+        let key = p.file
         if active.contains(key) {
             active.remove(key)
-            msg = "\(p.label) desactivado"
             return
         }
         guard let remote = FVStorage.remote(game, p.file) else { return }
         busy = key
-        msg = nil
         Task {
             do {
                 let (data, _) = try await URLSession.shared.data(from: remote)
@@ -812,7 +810,6 @@ struct FVPatchScreen: View {
                 await MainActor.run {
                     busy = nil
                     active.insert(key)
-                    msg = "\(p.label) descargado"
                     drafts.presentImport(FVStorage.url(p.file))
                 }
             } catch {
@@ -823,7 +820,6 @@ struct FVPatchScreen: View {
             }
         }
     }
-}
 
 struct FVKeyInfo: View {
     @ObservedObject var session: FVSession
