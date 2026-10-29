@@ -824,3 +824,34 @@ struct FVPatchScreen: View {
         }
     }
 }
+
+struct FVKeyInfo: View {
+    @ObservedObject var session: FVSession
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            VStack(spacing: 3) {
+                Text("TIEMPO RESTANTE")
+                    .font(.system(size: 8, weight: .heavy))
+                    .tracking(2)
+                    .foregroundColor(.white.opacity(0.45))
+                Text(restante(ctx.date))
+                    .font(.system(size: 16, weight: .black).monospacedDigit())
+                    .foregroundColor(Color(red: 0.37, green: 0.85, blue: 1))
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 8)
+            .background(Color.white.opacity(0.05))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .stroke(Color(red: 0.37, green: 0.85, blue: 1).opacity(0.25), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    private func restante(_ now: Date) -> String {
+        let t = max(0, Int(session.expires?.timeIntervalSince(now) ?? 0))
+        return String(format: "%02dd %02dh %02dm %02ds", t / 86400, (t % 86400) / 3600, (t % 3600) / 60, t % 60)
+    }
+}
