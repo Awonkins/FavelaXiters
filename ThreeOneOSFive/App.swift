@@ -656,6 +656,7 @@ struct FVPatchScreen: View {
     @State private var active: Set<String> = []
     @State private var busy: String?
     @State private var msg: String?
+    @State private var receipts: [String: PatchTransactionReceipt] = [:]
 
     private var items: [FVPatch] { FVData.items(game, cat) }
 
@@ -805,25 +806,42 @@ struct FVPatchScreen: View {
 
     private func toggle(_ p: FVPatch) {
         let key = p.file
-        if active.contains(key) {
-            active.remove(key)
-            return
-        }
-        guard let remote = FVStorage.remote(game, p.file) else { return }
+        let isOn = active.contains(key)
+        let existing = receipts[key]
+        let g = game
         busy = key
-        Task {
+        msg = nil
+        Task.detached(priority: .userInitiated) {
             do {
+                if isOn {
+                    if let existing {
+                        try DevicePatchService.restore(receipt: existing)
+                    }
+                    await MainActor.run {
+                        active.remove(key)
+                        receipts[key] = nil
+                        busy = nil
+                        msg = "\(p.label) desactivado"
+                    }
+                    return
+                }
+                guard let remote = FVStorage.remote(g, p.file) else {
+                    await MainActor.run { busy = nil; msg = "Archivo inválido" }
+                    return
+                }
                 let (data, _) = try await URLSession.shared.data(from: remote)
-                try data.write(to: FVStorage.url(p.file))
+                let decoded = try PatchPackageCodec.decode(data, password: nil)
+                let newReceipt = try DevicePatchService.apply(project: decoded.project)
                 await MainActor.run {
-                    busy = nil
+                    receipts[key] = newReceipt
                     active.insert(key)
-                    drafts.presentImport(FVStorage.url(p.file))
+                    busy = nil
+                    msg = "\(p.label) activo"
                 }
             } catch {
                 await MainActor.run {
                     busy = nil
-                    msg = "Error al descargar"
+                    msg = error.localizedDescription
                 }
             }
         }
