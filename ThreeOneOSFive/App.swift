@@ -717,39 +717,55 @@ struct FVPatchScreen: View {
 
     private func row(_ n: Int, _ p: FVPatch) -> some View {
         let on = active.contains(p.id.uuidString)
-        return HStack(spacing: 12) {
-            Text("\(n)")
-                .font(.system(size: 11, weight: .black))
-                .foregroundColor(.black)
-                .frame(width: 22, height: 22)
-                .background(Color.white.opacity(0.85))
-                .clipShape(Circle())
-            Text(p.label)
-                .font(.system(size: 11.5, weight: .bold))
-                .foregroundColor(.white)
-                .lineLimit(2)
-            Spacer()
+        return HStack(spacing: 11) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(red: 0.05, green: 0.33, blue: 0.52).opacity(0.55))
+                Image(systemName: cat >= 2 ? "sparkles" : "scope")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(Color(red: 0.45, green: 0.9, blue: 1))
+            }
+            .frame(width: 40, height: 40)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(p.label)
+                    .font(.system(size: 12, weight: .black))
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                Text(on ? "ACTIVO" : "TOCA PARA ACTIVAR")
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .tracking(0.4)
+                    .foregroundColor(on ? Color(red: 0.4, green: 0.95, blue: 0.6) : .white.opacity(0.4))
+            }
+
+            Spacer(minLength: 6)
+
             if busy == p.id.uuidString {
-                ProgressView().tint(.white)
+                ProgressView().tint(.white).frame(width: 46)
             } else {
-                Button { toggle(p) } label: {
-                    Text(on ? "ON" : "OFF")
-                        .font(.system(size: 10, weight: .black))
-                        .foregroundColor(on ? .black : .white.opacity(0.7))
-                        .frame(width: 44, height: 26)
-                        .background(on ? Color(red: 0.35, green: 0.95, blue: 0.55) : Color.white.opacity(0.1))
-                        .clipShape(Capsule())
-                }
+                Toggle("", isOn: Binding(
+                    get: { active.contains(p.id.uuidString) },
+                    set: { _ in toggle(p) }
+                ))
+                .labelsHidden()
+                .tint(Color(red: 0.37, green: 0.85, blue: 1))
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 11)
-        .background(Color.white.opacity(0.05))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Color.white.opacity(0.05))
         )
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(
+                    on
+                        ? Color(red: 0.37, green: 0.85, blue: 1).opacity(0.45)
+                        : Color(red: 0.37, green: 0.85, blue: 1).opacity(0.12),
+                    lineWidth: 1
+                )
+        )
     }
 
     private var infoBox: some View {
