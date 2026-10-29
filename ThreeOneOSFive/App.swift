@@ -291,21 +291,28 @@ final class FVSession: ObservableObject {
     @Published var unlocked: Bool
     @Published var hidden = false
 
+    var expires: Date? {
+        let t = UserDefaults.standard.double(forKey: "fv_exp")
+        return t > 0 ? Date(timeIntervalSince1970: t) : nil
+    }
+
     init() {
         let saved = UserDefaults.standard.string(forKey: "fv_key")
         let when = UserDefaults.standard.double(forKey: "fv_when")
         unlocked = saved != nil && (Date().timeIntervalSince1970 - when) < 12 * 3600
     }
 
-    func save(_ k: String) {
+    func save(_ k: String, expires date: Date?) {
         UserDefaults.standard.set(k, forKey: "fv_key")
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "fv_when")
+        UserDefaults.standard.set(date?.timeIntervalSince1970 ?? 0, forKey: "fv_exp")
         unlocked = true
     }
 
     func clear() {
         UserDefaults.standard.removeObject(forKey: "fv_key")
         UserDefaults.standard.removeObject(forKey: "fv_when")
+        UserDefaults.standard.removeObject(forKey: "fv_exp")
         unlocked = false
     }
 }
